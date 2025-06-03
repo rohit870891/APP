@@ -52,7 +52,7 @@ def load_cookies():
     for pair in cookie_str.split(';'):
         if '=' in pair:
             key, value = pair.strip().split('=', 1)
-            cookie_dict[key] = value
+            cookies_dict[key] = value
     return cookies_dict
 
 def find_between(string, start, end):
