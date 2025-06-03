@@ -48,12 +48,12 @@ def get_random_headers():
 def load_cookies():
     cookie_str = "browserid=cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=; lang=en; TSID=7neW7n6LXenkJEV0l9xwoXc87YgeObNR; __bid_n=1971ea13b40eefcf4f4207; _ga=GA1.1.113339747.1748565576; ndus=YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq; csrfToken=7rbF54M2IP5Hy8dh_ZCHGIFY;"
 
-    cookie_dict = {}
+    cookies_dict = {}
     for pair in cookie_str.split(';'):
         if '=' in pair:
             key, value = pair.strip().split('=', 1)
             cookie_dict[key] = value
-    return cookie_dict
+    return cookies_dict
 
 def find_between(string, start, end):
     try:
