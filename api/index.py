@@ -46,16 +46,14 @@ def get_random_headers():
     return headers
 
 def load_cookies():
-    cookies_dict = {}
-    if os.path.exists(COOKIES_FILE):
-        with open(COOKIES_FILE, 'r') as f:
-            for line in f:
-                if not line.strip() or line.startswith('#'):
-                    continue
-                parts = line.strip().split('\t')
-                if len(parts) >= 7:
-                    cookies_dict[parts[5]] = parts[6]
-    return cookies_dict
+    cookie_str = "browserid=cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=; lang=en; TSID=7neW7n6LXenkJEV0l9xwoXc87YgeObNR; __bid_n=1971ea13b40eefcf4f4207; _ga=GA1.1.113339747.1748565576; ndus=YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq; csrfToken=7rbF54M2IP5Hy8dh_ZCHGIFY;"
+
+    cookie_dict = {}
+    for pair in cookie_str.split(';'):
+        if '=' in pair:
+            key, value = pair.strip().split('=', 1)
+            cookie_dict[key] = value
+    return cookie_dict
 
 def find_between(string, start, end):
     try:
