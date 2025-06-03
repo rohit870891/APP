@@ -90,10 +90,10 @@ def find_between(string, start, end):
     except Exception:
         return None
 
-async def make_request(session, url, method='GET', headers=None, params=None, allow_redirects=True):
+async def make_request(session, url, method='GET', headers=None, params=None, allow_redirects=True, ssl=None):
     retry_count = 0
     last_exception = None
-    
+
     while retry_count < MAX_RETRIES:
         try:
             current_headers = headers or get_random_headers()
@@ -103,7 +103,8 @@ async def make_request(session, url, method='GET', headers=None, params=None, al
                 headers=current_headers,
                 params=params,
                 allow_redirects=allow_redirects,
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                ssl=ssl  # ✅ Add SSL context support
             ) as response:
                 if response.status == 403:
                     logger.warning(f"Blocked by server (403), retrying... (attempt {retry_count + 1})")
@@ -116,7 +117,7 @@ async def make_request(session, url, method='GET', headers=None, params=None, al
             last_exception = e
             retry_count += 1
             await asyncio.sleep(RETRY_DELAY * (retry_count + 1))
-    
+
     raise Exception(f"Max retries exceeded. Last error: {str(last_exception)}")
 
 
@@ -199,7 +200,7 @@ async def fetch_download_link_async(url):
         logger.error(f"Error in fetch_download_link_async: {str(e)}")
         raise
 
-async def get_direct_link(session, dlink):
+async def get_direct_link(session, dlink, ssl=None):
     try:
         # First try HEAD request
         try:
@@ -207,7 +208,8 @@ async def get_direct_link(session, dlink):
                 session,
                 dlink,
                 method='HEAD',
-                allow_redirects=False
+                allow_redirects=False,
+                ssl=ssl  # Pass ssl
             )
             if 300 <= response.status < 400:
                 return response.headers.get('Location', dlink)
@@ -219,7 +221,8 @@ async def get_direct_link(session, dlink):
             session,
             dlink,
             method='GET',
-            allow_redirects=False
+            allow_redirects=False,
+            ssl=ssl  # Pass ssl
         )
         if 300 <= response.status < 400:
             return response.headers.get('Location', dlink)
@@ -242,10 +245,10 @@ async def get_formatted_size(size_bytes):
     except Exception:
         return "Unknown size"
 
-async def process_file(session, file_data):
+async def process_file(session, file_data, ssl=None):
     try:
-        direct_link = await get_direct_link(session, file_data['dlink'])
-        
+        direct_link = await get_direct_link(session, file_data['dlink'], ssl=ssl)
+
         return {
             "file_name": file_data.get("server_filename"),
             "size": await get_formatted_size(file_data.get("size", 0)),
