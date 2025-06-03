@@ -5,6 +5,8 @@ import aiohttp
 import asyncio
 import logging
 import random
+import aiohttp
+import ssl
 import time
 from urllib.parse import parse_qs, urlparse
 from fake_useragent import UserAgent
@@ -20,6 +22,31 @@ REQUEST_TIMEOUT = 30
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 PORT = 3000
+
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                  "AppleWebKit/537.36 (KHTML, like Gecko) "
+                  "Chrome/122.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://1024terabox.com/"
+}
+
+COOKIES = {
+    "browserid": "cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=",
+    "lang": "en",
+    "TSID": "7neW7n6LXenkJEV0l9xwoXc87YgeObNR",
+    "__bid_n": "1971ea13b40eefcf4f4207",
+    "_ga": "GA1.1.113339747.1748565576",
+    "ndus": "YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq",
+    "csrfToken": "7rbF54M2IP5Hy8dh_ZCHGIFY"
+}
+
+sslcontext = ssl.create_default_context()
+sslcontext.check_hostname = False
+sslcontext.verify_mode = ssl.CERT_NONE
+
+timeout = aiohttp.ClientTimeout(total=30)
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -92,31 +119,28 @@ async def make_request(session, url, method='GET', headers=None, params=None, al
     
     raise Exception(f"Max retries exceeded. Last error: {str(last_exception)}")
 
+
 async def fetch_download_link_async(url):
     try:
-        cookies = load_cookies()
-        if not cookies:
-            raise Exception("No cookies found. Please provide valid cookies.")
-            
-        async with aiohttp.ClientSession(cookies=cookies) as session:
-            # First request to get the initial page
-            response = await make_request(session, url)
+        async with aiohttp.ClientSession(cookies=COOKIES, headers=HEADERS, timeout=timeout) as session:
+            response = await make_request(session, url, ssl=sslcontext)
             response_data = await response.text()
-            
+            logger.info(f"Status code: {response.status}")
+
             # Extract tokens
             js_token = find_between(response_data, 'fn%28%22', '%22%29')
             log_id = find_between(response_data, 'dp-logid=', '&')
-            
+
             if not js_token or not log_id:
-                raise Exception("Could not extract required tokens from the page")
-            
-            # Parse surl from final URL (after redirects)
-            request_url = str(response.url)
-            surl = request_url.split('surl=')[1] if 'surl=' in request_url else None
+                raise Exception("Could not extract jsToken or log_id")
+
+            # Extract surl from redirected final URL
+            redirected_url = str(response.url)
+            parsed = parse_qs(urlparse(redirected_url).query)
+            surl = parsed.get("surl", [None])[0]
             if not surl:
                 raise Exception("Could not extract surl from URL")
-            
-            # Prepare API parameters
+
             params = {
                 'app_id': '250528',
                 'web': '1',
@@ -128,23 +152,23 @@ async def fetch_download_link_async(url):
                 'num': '20',
                 'order': 'time',
                 'desc': '1',
-                'site_referer': request_url,
+                'site_referer': redirected_url,
                 'shorturl': surl,
                 'root': '1'
             }
-            
-            # Second request to get file list
+
             list_response = await make_request(
                 session,
                 'https://www.1024tera.com/share/list',
-                params=params
+                params=params,
+                ssl=sslcontext
             )
             list_data = await list_response.json()
-            
+
             if 'list' not in list_data or not list_data['list']:
-                raise Exception("No files found in the shared link")
-            
-            # Handle directories
+                raise Exception("No files found in shared link")
+
+            # If it's a folder
             if list_data['list'][0]['isdir'] == "1":
                 dir_params = params.copy()
                 dir_params.update({
@@ -155,21 +179,22 @@ async def fetch_download_link_async(url):
                 })
                 dir_params.pop('desc', None)
                 dir_params.pop('root', None)
-                
+
                 dir_response = await make_request(
                     session,
                     'https://www.1024tera.com/share/list',
-                    params=dir_params
+                    params=dir_params,
+                    ssl=sslcontext
                 )
                 dir_data = await dir_response.json()
-                
+
                 if 'list' not in dir_data or not dir_data['list']:
-                    raise Exception("No files found in the directory")
-                
+                    raise Exception("No files found inside directory")
+
                 return dir_data['list']
-            
+
             return list_data['list']
-    
+
     except Exception as e:
         logger.error(f"Error in fetch_download_link_async: {str(e)}")
         raise
