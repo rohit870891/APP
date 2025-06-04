@@ -8,6 +8,8 @@ import os
 import httpx
 import asyncio
 import ssl
+import uvicorn
+import os
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 app = FastAPI()
@@ -890,8 +892,11 @@ def is_valid_token(token):
     return isinstance(token, str) and len(token) >= 8 and re.fullmatch(r'[a-fA-F0-9]+', token) is not None
 
 
+
+# your route definitions here...
+
 if __name__ == "__main__":
-    import uvicorn
+
     port = int(os.environ.get("PORT", PORT))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("index:app", host="0.0.0.0", port=port, reload=True)
 
