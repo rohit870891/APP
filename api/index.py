@@ -14,7 +14,7 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 app = FastAPI()
 
-PORT = 3000
+PORT = 3001
 
 TOKEN = "TERAXBOTZ"
 
