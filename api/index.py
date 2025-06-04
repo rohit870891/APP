@@ -749,7 +749,7 @@ async def extractLogid(html: str, listsurl: str, jsToken: str, metadata: dict, h
 
     raise Exception("Missing dp-logid. Check share link, cookies, or API changes.")
 
-def get_surl(url: str):
+def getSurl(url: str):
     print('[GET_SURL] Starting', {'url': url})
     try:
         parsed = urlparse(url)
