@@ -204,7 +204,7 @@ async def fetchFileList(context):
         logging.error("[FETCH_FILE_LIST] Failed", {'message': str(e)})
         raise
 
-async def process_list_data(file_list, metadata, tokens):
+async def processListData(file_list, metadata, tokens):
     print('[PROCESS_LIST_DATA] Starting', {
         'listLength': len(file_list),
         'metadata': {'shareid': metadata['shareid']},
@@ -545,7 +545,7 @@ async def fetch_page(url: str, headers: dict) -> dict:
         })
         return {"html": html, "finalUrl": str(response.url)}
 
-async def get_file_metadata(surl: str, headers: dict) -> dict:
+async def getFileMetadata(surl: str, headers: dict) -> dict:
     logging.info('[GET_FILE_METADATA] Starting', {'surl': surl})
     url = f"https://www.1024tera.com/api/shorturlinfo?app_id=250528&shorturl={surl}&root=1"
     max_retries = 3
@@ -630,7 +630,7 @@ def format_size(bytes_):
 
 log = logging.getLogger("extractLogid")
 
-async def extract_logid(html: str, listsurl: str, jsToken: str, metadata: dict, headers: dict) -> str:
+async def extractLogid(html: str, listsurl: str, jsToken: str, metadata: dict, headers: dict) -> str:
     log.info('[EXTRACT_LOGID] Starting', extra={
         "listsurl": listsurl,
         "jsToken": bool(jsToken),
