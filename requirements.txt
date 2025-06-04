@@ -2,6 +2,8 @@ Flask[async]
 aiohttp
 requests
 gunicorn
+fastapi
+uvicorn
 fake-useragent
 Flask
 beautifulsoup4
