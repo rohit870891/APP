@@ -57,7 +57,7 @@ async def handler(request: Request, url: str = Query(None), token: str = Query(N
 
     try:
         # `process_terabox_share` will be provided by you
-        result = await process_terabox_share(url)
+        result = await processTeraboxShare(url)
         print('[MAIN] Processing completed', { "result": { "success": result["success"], "isFolder": result["isFolder"], "dataLength": len(result["data"]) } })
         return JSONResponse(status_code=200, content={"success": True, **result})
     except Exception as error:
