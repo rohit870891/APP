@@ -1,345 +1,358 @@
-import os
-from flask import Flask, request, jsonify, Response
-import json
+from fastapi import FastAPI, Request, Response, Query
+from fastapi.responses import JSONResponse
 import aiohttp
-import asyncio
 import logging
-import random
-import aiohttp
-import ssl
-import time
-from urllib.parse import parse_qs, urlparse
-from fake_useragent import UserAgent
+import json
+from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
-app = Flask(__name__)
+app = FastAPI()
 
-# ====== 🇮🇳 ==============
-# # © Developer = WOODcraft 
-# ========================
-# Configuration
-COOKIES_FILE = 'cookies.txt'
-REQUEST_TIMEOUT = 30
-MAX_RETRIES = 3
-RETRY_DELAY = 2
-PORT = 3000
+import logging
+
+TOKEN = "TERAXBOTZ"
+
+COOKIE = "browserid=cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=; lang=en; TSID=7neW7n6LXenkJEV0l9xwoXc87YgeObNR; __bid_n=1971ea13b40eefcf4f4207; _ga=GA1.1.113339747.1748565576; ndus=YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq; csrfToken=7rbF54M2IP5Hy8dh_ZCHGIFY"
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                  "AppleWebKit/537.36 (KHTML, like Gecko) "
-                  "Chrome/122.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json",
     "Accept-Language": "en-US,en;q=0.9",
-    "Referer": "https://1024terabox.com/"
+    "Cookie": COOKIE,
+    "Referer": "https://www.terabox.com/"
 }
 
-COOKIES = {
-    "browserid": "cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=",
-    "lang": "en",
-    "TSID": "7neW7n6LXenkJEV0l9xwoXc87YgeObNR",
-    "__bid_n": "1971ea13b40eefcf4f4207",
-    "_ga": "GA1.1.113339747.1748565576",
-    "ndus": "YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq",
-    "csrfToken": "7rbF54M2IP5Hy8dh_ZCHGIFY"
-}
+@app.get("/")
+async def handler(request: Request, url: str = Query(None), token: str = Query(None)):
+    print('[MAIN] Starting request processing', { "method": request.method, "query": {"url": url, "token": token} })
 
-sslcontext = ssl.create_default_context()
-sslcontext.check_hostname = False
-sslcontext.verify_mode = ssl.CERT_NONE
+    if request.method == "OPTIONS":
+        print('[MAIN] Handling CORS preflight request')
+        response = Response(status_code=200)
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+        print('[MAIN] CORS response sent', { "status": 200 })
+        return response
 
-timeout = aiohttp.ClientTimeout(total=30)
+    if request.method != "GET":
+        print('[MAIN] Invalid method received', { "method": request.method })
+        return JSONResponse(status_code=405, content={"success": False, "error": "Method not allowed"})
 
+    print('[MAIN] Parsed query parameters', { "teraboxUrl": url, "token": token })
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+    if not url or not token:
+        print('[MAIN] Missing parameters', { "urlExists": bool(url), "tokenExists": bool(token) })
+        return JSONResponse(status_code=400, content={"success": False, "error": "Missing url or token"})
 
-# Initialize user agent rotator
-ua = UserAgent()
+    if token != TOKEN:
+        print('[MAIN] Invalid token provided', { "received": token, "expected": TOKEN })
+        return JSONResponse(status_code=401, content={"success": False, "error": "Invalid Token"})
 
-def get_random_headers():
-    headers = {
-        'User-Agent': ua.random,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-        'Upgrade-Insecure-Requests': '1',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Cache-Control': 'max-age=0',
-        'Referer': 'https://terafileshare.com/'
-    }
-    return headers
-
-def load_cookies():
-    cookie_str = "browserid=cLNycJqGL6eOGpkhz9CtW3sG7CS89UeNe0Ycq2Ainq-UD9VlRDZiyB8tBaI=; lang=en; TSID=7neW7n6LXenkJEV0l9xwoXc87YgeObNR; __bid_n=1971ea13b40eefcf4f4207; _ga=GA1.1.113339747.1748565576; ndus=YvZErXkpeHui6z7tOvOuDPvaDsYiQOZosuA0eNJq; csrfToken=7rbF54M2IP5Hy8dh_ZCHGIFY;"
-
-    cookies_dict = {}
-    for pair in cookie_str.split(';'):
-        if '=' in pair:
-            key, value = pair.strip().split('=', 1)
-            cookies_dict[key] = value
-    return cookies_dict
-
-def find_between(string, start, end):
     try:
-        start_index = string.find(start) + len(start)
-        end_index = string.find(end, start_index)
-        return string[start_index:end_index] if start_index >= len(start) and end_index != -1 else None
-    except Exception:
-        return None
+        # `process_terabox_share` will be provided by you
+        result = await process_terabox_share(url)
+        print('[MAIN] Processing completed', { "result": { "success": result["success"], "isFolder": result["isFolder"], "dataLength": len(result["data"]) } })
+        return JSONResponse(status_code=200, content={"success": True, **result})
+    except Exception as error:
+        print('[MAIN] Unhandled error', { "message": str(error) })
+        return JSONResponse(status_code=500, content={"success": False, "error": str(error)})
 
-async def make_request(session, url, method='GET', headers=None, params=None, allow_redirects=True, ssl=None):
-    retry_count = 0
-    last_exception = None
-
-    while retry_count < MAX_RETRIES:
-        try:
-            current_headers = headers or get_random_headers()
-            async with session.request(
-                method,
-                url,
-                headers=current_headers,
-                params=params,
-                allow_redirects=allow_redirects,
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
-                ssl=ssl  # ✅ Add SSL context support
-            ) as response:
-                if response.status == 403:
-                    logger.warning(f"Blocked by server (403), retrying... (attempt {retry_count + 1})")
-                    retry_count += 1
-                    await asyncio.sleep(RETRY_DELAY * (retry_count + 1))
-                    continue
-                response.raise_for_status()
-                return response
-        except Exception as e:
-            last_exception = e
-            retry_count += 1
-            await asyncio.sleep(RETRY_DELAY * (retry_count + 1))
-
-    raise Exception(f"Max retries exceeded. Last error: {str(last_exception)}")
-
-
-async def fetch_download_link_async(url):
+async def processTeraboxShare(share_url):
+    logging.info("[PROCESS_TERABOX_SHARE] Starting", {'shareUrl': share_url})
     try:
-        async with aiohttp.ClientSession(cookies=COOKIES, headers=HEADERS, timeout=timeout) as session:
-            response = await make_request(session, url, ssl=sslcontext)
-            response_data = await response.text()
-            logger.info(f"Status code: {response.status}")
+        surl = getSurl(share_url)
+        logging.info("[PROCESS_TERABOX_SHARE] Extracted surl", {'surl': surl})
+        if not surl:
+            raise Exception("Invalid Terabox URL")
 
-            # Extract tokens
-            js_token = find_between(response_data, 'fn%28%22', '%22%29')
-            log_id = find_between(response_data, 'dp-logid=', '&')
+        html, final_url = await fetchPage(share_url)
+        logging.info("[PROCESS_TERABOX_SHARE] Page fetched", {'finalUrl': final_url, 'htmlLength': len(html)})
 
-            if not js_token or not log_id:
-                raise Exception("Could not extract jsToken or log_id")
+        listsurl = getSurl(final_url)
+        logging.info("[PROCESS_TERABOX_SHARE] Extracted listsurl", {'listsurl': listsurl})
+        if not listsurl:
+            raise Exception("Failed to extract listsurl")
 
-            # Extract surl from redirected final URL
-            redirected_url = str(response.url)
-            parsed = parse_qs(urlparse(redirected_url).query)
-            surl = parsed.get("surl", [None])[0]
-            if not surl:
-                raise Exception("Could not extract surl from URL")
+        jsToken, bdstoken = extractTokens(html)
+        logging.info("[PROCESS_TERABOX_SHARE] Extracted tokens", {'jsToken': bool(jsToken), 'bdstoken': bool(bdstoken)})
+        if not jsToken or not bdstoken:
+            raise Exception("Token extraction failed")
 
-            params = {
-                'app_id': '250528',
-                'web': '1',
-                'channel': 'dubox',
-                'clienttype': '0',
-                'jsToken': js_token,
-                'dplogid': log_id,
-                'page': '1',
-                'num': '20',
-                'order': 'time',
-                'desc': '1',
-                'site_referer': redirected_url,
-                'shorturl': surl,
-                'root': '1'
+        metadata = await getFileMetadata(surl)
+        logging.info("[PROCESS_TERABOX_SHARE] Metadata fetched", {
+            'listLength': len(metadata['list']) if metadata.get('list') else 0,
+            'shareid': metadata.get('shareid'),
+            'uk': metadata.get('uk')
+        })
+
+        if not metadata.get('list'):
+            raise Exception("No files found in metadata")
+
+        logid = await extractLogid(html, listsurl, jsToken, metadata)
+        logging.info("[PROCESS_TERABOX_SHARE] Extracted logid", {'logid': logid})
+        if not logid:
+            raise Exception("Failed to extract DP log ID")
+
+        is_folder = metadata['list'][0]['isdir'] == 1
+        logging.info("[PROCESS_TERABOX_SHARE] Resource type", {'isFolder': is_folder})
+
+        list_data = await fetchFileList({
+            'metadata': metadata,
+            'surl': surl,
+            'tokens': {
+                'jsToken': jsToken,
+                'logid': logid,
+                'bdstoken': bdstoken,
+                'listsurl': listsurl
             }
+        })
+        logging.info("[PROCESS_TERABOX_SHARE] File list fetched", {'itemCount': len(list_data)})
 
-            list_response = await make_request(
-                session,
-                'https://www.1024tera.com/share/list',
-                params=params,
-                ssl=sslcontext
-            )
-            list_data = await list_response.json()
+        files = await processListData(list_data, metadata, {
+            'jsToken': jsToken,
+            'logid': logid,
+            'bdstoken': bdstoken
+        })
+        filtered_files = list(filter(None, files))
+        logging.info("[PROCESS_TERABOX_SHARE] Files processed", {'fileCount': len(filtered_files)})
 
-            if 'list' not in list_data or not list_data['list']:
-                raise Exception("No files found in shared link")
-
-            # If it's a folder
-            if list_data['list'][0]['isdir'] == "1":
-                dir_params = params.copy()
-                dir_params.update({
-                    'dir': list_data['list'][0]['path'],
-                    'order': 'asc',
-                    'by': 'name',
-                    'dplogid': log_id
-                })
-                dir_params.pop('desc', None)
-                dir_params.pop('root', None)
-
-                dir_response = await make_request(
-                    session,
-                    'https://www.1024tera.com/share/list',
-                    params=dir_params,
-                    ssl=sslcontext
-                )
-                dir_data = await dir_response.json()
-
-                if 'list' not in dir_data or not dir_data['list']:
-                    raise Exception("No files found inside directory")
-
-                return dir_data['list']
-
-            return list_data['list']
+        result = {
+            'success': True,
+            'isFolder': is_folder,
+            'data': filtered_files
+        }
+        logging.info("[PROCESS_TERABOX_SHARE] Returning result", {
+            'success': result['success'],
+            'isFolder': is_folder,
+            'dataLength': len(result['data'])
+        })
+        return result
 
     except Exception as e:
-        logger.error(f"Error in fetch_download_link_async: {str(e)}")
+        logging.error("[PROCESS_TERABOX_SHARE] Failed", {'message': str(e)})
         raise
 
-async def get_direct_link(session, dlink, ssl=None):
-    try:
-        # First try HEAD request
-        try:
-            response = await make_request(
-                session,
-                dlink,
-                method='HEAD',
-                allow_redirects=False,
-                ssl=ssl  # Pass ssl
-            )
-            if 300 <= response.status < 400:
-                return response.headers.get('Location', dlink)
-        except Exception:
-            pass
-        
-        # Fallback to GET request if HEAD fails
-        response = await make_request(
-            session,
-            dlink,
-            method='GET',
-            allow_redirects=False,
-            ssl=ssl  # Pass ssl
-        )
-        if 300 <= response.status < 400:
-            return response.headers.get('Location', dlink)
-        
-        return dlink
-    except Exception as e:
-        logger.warning(f"Could not get direct link: {str(e)}")
-        return dlink
+async def fetchFileList(context):
+    metadata = context['metadata']
+    surl = context['surl']
+    tokens = context['tokens']
 
-async def get_formatted_size(size_bytes):
-    try:
-        size_bytes = int(size_bytes)
-        if size_bytes >= 1024 * 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-        elif size_bytes >= 1024 * 1024:
-            return f"{size_bytes / (1024 * 1024):.2f} MB"
-        elif size_bytes >= 1024:
-            return f"{size_bytes / 1024:.2f} KB"
-        return f"{size_bytes} bytes"
-    except Exception:
-        return "Unknown size"
+    logging.info("[FETCH_FILE_LIST] Starting", {
+        'surl': surl,
+        'tokens': {k: bool(v) for k, v in tokens.items()},
+        'metadata': {'shareid': metadata['shareid'], 'uk': metadata['uk']}
+    })
 
-async def process_file(session, file_data, ssl=None):
     try:
-        direct_link = await get_direct_link(session, file_data['dlink'], ssl=ssl)
+        is_folder = metadata['list'][0]['isdir'] == 1
+        logging.info("[FETCH_FILE_LIST] Resource is folder", {'isFolder': is_folder})
 
-        return {
-            "file_name": file_data.get("server_filename"),
-            "size": await get_formatted_size(file_data.get("size", 0)),
-            "size_bytes": file_data.get("size", 0),
-            "download_url": file_data['dlink'],
-            "direct_download_url": direct_link,
-            "is_directory": file_data.get("isdir", "0") == "1",
-            "modify_time": file_data.get("server_mtime"),
-            "thumbnails": file_data.get("thumbs", {})
+        list_url = "https://www.1024tera.com/share/list"
+        params = {
+            'app_id': '250528',
+            'web': '1',
+            'jsToken': tokens['jsToken'],
+            'shorturl': tokens['listsurl'],
+            'shareid': metadata['shareid'],
+            'uk': metadata['uk'],
+            'dp-logid': tokens['logid'],
+            'sign': metadata['sign'],
+            'timestamp': metadata['timestamp'],
+            'root': 0 if is_folder else 1,
+            'page': '1',
+            'num': '1000',
+            'dir': metadata['list'][0]['path'] if is_folder else '/'
         }
-    except Exception as e:
-        logger.error(f"Error processing file: {str(e)}")
-        return None
 
-@app.route('/api', methods=['GET'])
-async def api_handler():
-    start_time = time.time()
-    try:
-        url = request.args.get('url')
-        if not url:
-            return jsonify({
-                "status": "error",
-                "message": "URL parameter is required. Developed by @Farooq_is_king. Join @OPLEECH_WD for updates.",
-                "usage": "/api?url=YOUR_TERABOX_SHARE_URL"
-            }), 400
-        
-        logger.info(f"Processing URL: {url}")
-        
-        files = await fetch_download_link_async(url)
-        if not files:
-            return jsonify({
-                "status": "error",
-                "message": "No files found in the shared link",
-                "url": url
-            }), 404
-        
-        async with aiohttp.ClientSession(cookies=load_cookies()) as session:
-            results = []
-            for file in files:
-                processed = await process_file(session, file)
-                if processed:
-                    results.append(processed)
-            
-            if not results:
-                return jsonify({
-                    "status": "error",
-                    "message": "Could not process any files",
-                    "url": url
-                }), 500
-            
-            return jsonify({
-                "status": "success",
-                "url": url,
-                "files": results,
-                "processing_time": f"{time.time() - start_time:.2f} seconds",
-                "file_count": len(results)
-            })
-    
-    except Exception as e:
-        logger.error(f"API error: {str(e)}")
-        return jsonify({
-            "status": "error",
-            "message": str(e),
-            "url": url or "Not provided"
-        }), 500
-
-from flask import Response
-import json
-
-@app.route('/')
-def home():
-    data = {
-        "status": "Running ✅",
-        "developer": "@Farooq_is_king",
-        "channel": "@Opleech_WD",
-        "endpoints": {
-            "/api": "GET with ?url=TERABOX_SHARE_URL parameter",
-            "/health": "Service health check"
+        parsed_host = urlparse(list_url).hostname
+        dynamic_headers = {
+            **headers,
+            "Host": parsed_host,
+            "Referer": f"https://{parsed_host}/",
+            "Origin": f"https://{parsed_host}"
         }
-    }
-    return Response(json.dumps(data, ensure_ascii=False), mimetype='application/json')
+        logging.info("[FETCH_FILE_LIST] Request headers", {
+            'Host': dynamic_headers['Host'],
+            'Referer': dynamic_headers['Referer'],
+            'Cookie': 'exists' if 'Cookie' in dynamic_headers else 'missing'
+        })
 
-@app.route('/health')
-def health_check():
-    data = {
-        "status": "healthy",
-        "developer": "@Farooq_is_king",
-        "channel": "@Opleech_WD"
-    }
-    return Response(json.dumps(data, ensure_ascii=False), mimetype='application/json')
+        async with aiohttp.ClientSession() as session:
+            async with session.get(list_url, headers=dynamic_headers, params=params) as response:
+                logging.info("[FETCH_FILE_LIST] Response received", {'status': response.status, 'url': str(response.url)})
+                data = await response.json()
+                logging.info("[FETCH_FILE_LIST] Response data", {
+                    'keys': list(data.keys()),
+                    'listLength': len(data.get('list', []))
+                })
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 3000))
-    app.run(host='0.0.0.0', port=port, threaded=True)
+                if not data.get('list'):
+                    logging.error("[FETCH_FILE_LIST] Empty response from API", {'data': data})
+                    raise Exception("Empty response from list API")
+
+                logging.info("[FETCH_FILE_LIST] Returning list", {'itemCount': len(data['list'])})
+                return data['list']
+
+    except Exception as e:
+        logging.error("[FETCH_FILE_LIST] Failed", {'message': str(e)})
+        raise
+
+async def process_list_data(file_list, metadata, tokens):
+    print('[PROCESS_LIST_DATA] Starting', {
+        'listLength': len(file_list),
+        'metadata': {'shareid': metadata['shareid']},
+        'tokens': {k: bool(tokens.get(k)) for k in ['jsToken', 'logid', 'bdstoken']}
+    })
+    try:
+        batches = [file_list[i:i + 50] for i in range(0, len(file_list), 50)]
+        print('[PROCESS_LIST_DATA] Created batches', {'batchCount': len(batches)})
+
+        results = []
+        for index, batch in enumerate(batches):
+            print('[PROCESS_LIST_DATA] Processing batch', {'batchIndex': index + 1, 'batchSize': len(batch)})
+            batch_results = await asyncio.gather(*(process_list_item(item, metadata, tokens) for item in batch))
+            print('[PROCESS_LIST_DATA] Batch results', {'batchIndex': index + 1, 'resultCount': len(batch_results)})
+            results.extend(batch_results)
+
+        print('[PROCESS_LIST_DATA] Returning results', {'totalResults': len(results)})
+        return results
+    except Exception as e:
+        print('[PROCESS_LIST_DATA] Failed', {'message': str(e)})
+        raise
+
+
+async def process_list_item(item, metadata, tokens):
+    print('[PROCESS_LIST_ITEM] Starting', {
+        'filename': item['server_filename'],
+        'isdir': item['isdir'],
+        'metadata': {'shareid': metadata['shareid']},
+        'tokens': {k: bool(tokens.get(k)) for k in ['jsToken', 'logid', 'bdstoken']}
+    })
+    try:
+        if item['isdir'] == 1:
+            print('[PROCESS_LIST_ITEM] Handling folder', {'filename': item['server_filename']})
+            result = {
+                'filename': item['server_filename'],
+                'path': item['path'],
+                'is_folder': True
+            }
+            print('[PROCESS_LIST_ITEM] Folder result', result)
+            return result
+
+        file_dlink = await get_file_dlink(item, metadata, tokens)
+        print('[PROCESS_LIST_ITEM] Download link fetched', {'dllink': file_dlink['dllink']})
+
+        result = {
+            'filename': item['server_filename'],
+            'path': item['path'],
+            'size': format_size(item['size']),
+            'sizebytes': int(item.get('size', 0)),
+            'dlink': file_dlink['dllink'],
+            'thumb': item.get('thumbs', {}).get('url3', None),
+            'is_folder': False
+        }
+        print('[PROCESS_LIST_ITEM] File result', result)
+        return result
+    except Exception as e:
+        print('[PROCESS_LIST_ITEM] Failed', {
+            'filename': item['server_filename'],
+            'message': str(e)
+        })
+        error_result = {
+            'filename': item['server_filename'],
+            'path': item['path'],
+            'size': format_size(item.get('size', 0)),
+            'sizebytes': int(item.get('size', 0)),
+            'error': str(e),
+            'is_folder': item['isdir'] == 1
+        }
+        print('[PROCESS_LIST_ITEM] Error result', error_result)
+        return error_result
+
+
+async def get_file_dlink(file, metadata, tokens):
+    print('[GET_FILE_DLINK] Starting', {
+        'filename': file['server_filename'],
+        'fs_id': file['fs_id'],
+        'metadata': {
+            'shareid': metadata['shareid'],
+            'sign': metadata['sign'],
+            'timestamp': metadata['timestamp']
+        },
+        'tokens': {
+            'jsToken': bool(tokens.get('jsToken')),
+            'bdstoken': bool(tokens.get('bdstoken')),
+            'logid': tokens.get('logid')
+        }
+    })
+    try:
+        query_params = {
+            'app_id': '250528',
+            'web': '1',
+            'channel': 'dubox',
+            'clienttype': '0',
+            'shareid': metadata['shareid'],
+            'type': 'dlink',
+            'sign': metadata['sign'],
+            'timestamp': metadata['timestamp'],
+            'need_speed': '1',
+            'jsToken': tokens['jsToken'],
+            'bdstoken': tokens['bdstoken'],
+            'dp-logid': tokens['logid']
+        }
+
+        body = {
+            'product': 'share',
+            'uk': metadata['uk'],
+            'fid_list': json.dumps([file['fs_id']]),
+            'primaryid': metadata['shareid']
+        }
+
+        url = f"https://www.terabox.com/share/download?{urlencode(query_params)}"
+        parsed_url = urlparse(url)
+        dynamic_headers = {
+            **headers,
+            'Host': parsed_url.hostname,
+            'Referer': f"https://{parsed_url.hostname}/",
+            'Origin': f"https://{parsed_url.hostname}"
+        }
+        print('[GET_FILE_DLINK] Request headers', {
+            'Host': dynamic_headers['Host'],
+            'Referer': dynamic_headers['Referer'],
+            'Cookie': 'exists' if 'Cookie' in dynamic_headers else 'missing'
+        })
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, data=body, headers=dynamic_headers) as response:
+                print('[GET_FILE_DLINK] Response received', {'status': response.status, 'url': str(response.url)})
+                data = await response.json()
+                print('[GET_FILE_DLINK] Response data', json.dumps(data, indent=2))
+
+                dllink = data.get('dlink') or (data.get('list') or [{}])[0].get('dlink')
+                print('[GET_FILE_DLINK] Extracted dlink', {'dllink': dllink})
+                if not dllink:
+                    raise Exception(data.get('errmsg', 'No download link in response'))
+
+                print('[GET_FILE_DLINK] Following redirects for', {'filename': file['server_filename'], 'dllink': dllink})
+                download_link = await follow_redirects(dllink, tokens)
+                print('[GET_FILE_DLINK] Resolved download link', {'downloadLink': download_link})
+
+                direct_link_parts = list(urlparse(download_link))
+                direct_query = parse_qs(direct_link_parts[4])
+                direct_query.update({
+                    'sign': metadata['sign'],
+                    'timestamp': metadata['timestamp'],
+                    'jsToken': tokens['jsToken']
+                })
+                direct_link_parts[4] = urlencode(direct_query, doseq=True)
+                final_link = urlunparse(direct_link_parts)
+
+                result = {'downloadLink': final_link, 'dllink': dllink}
+                print('[GET_FILE_DLINK] Returning result', result)
+                return result
+    except Exception as e:
+        print('[GET_FILE_DLINK] Failed', {
+            'filename': file['server_filename'],
+            'message': str(e)
+        })
+        raise
