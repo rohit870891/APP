@@ -482,7 +482,7 @@ def success_response(data: dict) -> JSONResponse:
     })
     return response
 
-async def fetch_page(url: str, headers: dict) -> dict:
+async def fetchPage(url: str, headers: dict) -> dict:
     logging.info('[FETCH_PAGE] Starting', {'url': url})
     max_redirects = 5
     redirect_count = 0
@@ -853,7 +853,7 @@ def extract_bdstoken(html: str):
         print('[EXTRACT_BDSTOKEN] Error:', str(e))
         return None
 
-def extract_tokens(html: str):
+def extractTokens(html: str):
     print('[EXTRACT_TOKENS] Starting', {'htmlLength': len(html)})
 
     try:
