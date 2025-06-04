@@ -4,6 +4,7 @@ import aiohttp
 import logging
 import json
 import re
+import os
 import httpx
 import asyncio
 import ssl
@@ -888,4 +889,9 @@ def fix_json(js_obj_str: str):
 def is_valid_token(token):
     return isinstance(token, str) and len(token) >= 8 and re.fullmatch(r'[a-fA-F0-9]+', token) is not None
 
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 3000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
 
