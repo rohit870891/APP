@@ -4,3 +4,8 @@ requests
 gunicorn
 fake-useragent
 Flask
+beautifulsoup4
+cloudscraper
+lxml
+httpx
+fake-useragent
