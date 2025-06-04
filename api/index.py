@@ -12,7 +12,7 @@ from urllib.parse import urlencode, urlparse, urlunparse, parse_qs
 
 app = FastAPI()
 
-import logging
+PORT = 3000
 
 TOKEN = "TERAXBOTZ"
 
@@ -892,6 +892,6 @@ def is_valid_token(token):
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.environ.get("PORT", 3000))
+    port = int(os.environ.get("PORT", PORT))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
 
